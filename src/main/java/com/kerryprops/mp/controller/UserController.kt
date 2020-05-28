@@ -5,13 +5,13 @@ import com.kerryprops.mp.OrderByListExpr
 import com.kerryprops.mp.bean.User
 import com.kerryprops.mp.controller.base.UserControllerBase
 import com.kerryprops.mp.mask.UserMask
-import com.kerryprops.mp.service.ex.UserServiceEx
+import com.kerryprops.mp.serviceEx.UserServiceEx
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.tika.Tika
+import org.apache.tika.mime.MimeTypes
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.bind.annotation.*
 import java.io.File
-import java.io.InputStream
-import java.io.OutputStream
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 import javax.servlet.http.HttpSession
@@ -56,7 +56,7 @@ class UserController : UserControllerBase() {
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return }
         //删除失败，返回204
         userServiceEx.delete(usid).takeIf { it } ?: run { response.status = HttpServletResponse.SC_NO_CONTENT; return }
-        File(session.servletContext.getRealPath("$attachmentFolder/${User.NAME}/$usid")).delete()
+        File("$attachmentFolder/${User.NAME}/$usid").delete()
     }
 
     override fun onCount(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, filter: FilterExpr?): Long? {
@@ -74,33 +74,32 @@ class UserController : UserControllerBase() {
         return userService.query(filter, orderByList, start, count, mask.setUspswd(false))
     }
 
-    override fun inputStream(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, usid: Int, name: String): InputStream? {
-        //name超范围，返回400
-        name.takeIf { it == "portrait" } ?: run { response.status = HttpServletResponse.SC_BAD_REQUEST; return null }
+    override fun onReadAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, usid: Int, name: String?): ByteArray? {
         //未登录，返回403
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return null }
         //文件不存在，返回404
-        val file = File(session.servletContext.getRealPath("$attachmentFolder/${User.NAME}/$usid/$name")).takeIf { it.exists() } ?: run { response.status = HttpServletResponse.SC_NOT_FOUND; return null }
+        val file = File("$attachmentFolder/${User.NAME}/$usid").takeIf { it.exists() }?.listFiles()?.takeIf { it.isNotEmpty() }?.get(0) ?: run { response.status = HttpServletResponse.SC_NOT_FOUND; return null }
         //处理
-        return file.inputStream()
+        return file.readBytes()
     }
 
-    override fun outputStream(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, usid: Int, name: String): OutputStream? {
-        //name超范围，返回400
-        name.takeIf { it == "portrait" } ?: run { response.status = HttpServletResponse.SC_BAD_REQUEST; return null }
+    override fun onWriteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, usid: Int, name: String?, bytes: ByteArray) {
         //未登录，返回403
-        session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return null }
+        session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return }
+        //内容不符，返回406
+        val contentType = Tika().detect(bytes).takeIf { it.startsWith("image/") } ?: run { response.status = HttpServletResponse.SC_NOT_ACCEPTABLE; return }
         //处理
-        return File(session.servletContext.getRealPath("$attachmentFolder/${User.NAME}/$usid/$name")).also { if (!it.parentFile.exists()) it.parentFile.mkdirs() }.outputStream()
+        File("$attachmentFolder/${User.NAME}/$usid/portrait${MimeTypes.getDefaultMimeTypes().forName(contentType).extension}")
+                .also { if (!it.parentFile.exists()) it.parentFile.mkdirs() }
+                .also { it.parentFile.listFiles().forEach { it.delete() } }
+                .writeBytes(bytes)
     }
 
-    override fun onDeleteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, usid: Int, name: String) {
-        //name超范围，返回400
-        name.takeIf { it == "portrait" } ?: run { response.status = HttpServletResponse.SC_BAD_REQUEST; return }
+    override fun onDeleteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, usid: Int, name: String?) {
         //未登录，返回403
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return }
         //文件不存在，返回204
-        val file = File(session.servletContext.getRealPath("$attachmentFolder/${User.NAME}/$usid/$name")).takeIf { it.exists() } ?: run { response.status = HttpServletResponse.SC_NO_CONTENT; return }
+        val file = File("$attachmentFolder/${User.NAME}/$usid").takeIf { it.exists() }?.listFiles()?.takeIf { it.isNotEmpty() }?.get(0) ?: run { response.status = HttpServletResponse.SC_NO_CONTENT; return }
         //处理
         file.delete()
     }
@@ -109,7 +108,7 @@ class UserController : UserControllerBase() {
         //未登录，返回403
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return mutableListOf() }
         //处理
-        return File(session.servletContext.getRealPath("$attachmentFolder/${User.NAME}/$usid")).takeIf { it.exists() }?.list()?.toMutableList() ?: mutableListOf()
+        return File("$attachmentFolder/${User.NAME}/$usid").takeIf { it.exists() }?.list()?.toMutableList() ?: mutableListOf()
     }
 
     @CrossOrigin(origins = [html], allowCredentials = "true")

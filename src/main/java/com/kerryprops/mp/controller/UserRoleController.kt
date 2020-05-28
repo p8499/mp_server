@@ -7,7 +7,6 @@ import com.kerryprops.mp.controller.base.UserRoleControllerBase
 import com.kerryprops.mp.mask.UserRoleMask
 import org.springframework.web.bind.annotation.RestController
 import java.io.InputStream
-import java.io.OutputStream
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 import javax.servlet.http.HttpSession
@@ -66,17 +65,17 @@ class UserRoleController : UserRoleControllerBase() {
         return userRoleService.query(filter, orderByList, start, count, mask)
     }
 
-    override fun inputStream(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, urid: Int, name: String): InputStream? {
+    override fun onReadAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, urid: Int, name: String?): ByteArray? {
         //不提供此方法，返回404
         kotlin.run { response.status = HttpServletResponse.SC_NOT_FOUND; return null }
     }
 
-    override fun outputStream(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, urid: Int, name: String): OutputStream? {
+    override fun onWriteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, urid: Int, name: String?, bytes: ByteArray) {
         //不提供此方法，返回404
-        kotlin.run { response.status = HttpServletResponse.SC_NOT_FOUND; return null }
+        kotlin.run { response.status = HttpServletResponse.SC_NOT_FOUND; return }
     }
 
-    override fun onDeleteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, urid: Int, name: String) {
+    override fun onDeleteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, urid: Int, name: String?) {
         //不提供此方法，返回404
         kotlin.run { response.status = HttpServletResponse.SC_NOT_FOUND; return }
     }

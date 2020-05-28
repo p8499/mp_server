@@ -1,4 +1,4 @@
-package com.kerryprops.mp.service.ex
+package com.kerryprops.mp.serviceEx
 
 import com.kerryprops.mp.FilterLogicExpr
 import com.kerryprops.mp.bean.RolePrivilege

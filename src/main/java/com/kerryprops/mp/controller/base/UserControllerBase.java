@@ -1,14 +1,13 @@
 package com.kerryprops.mp.controller.base;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URLConnection;
 import java.util.List;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import org.apache.tika.Tika;
+import org.apache.tika.mime.MimeTypes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.*;
@@ -191,35 +190,41 @@ public abstract class UserControllerBase {
       throws Exception;
 
   @CrossOrigin(origins = html, allowCredentials = "true", exposedHeaders = "Content-Disposition")
-  @RequestMapping(
-    value = attachmentPath + pathKey,
-    method = RequestMethod.GET,
-    produces = "application/octet-stream"
-  )
+  @RequestMapping(value = attachmentPath + pathKey, method = RequestMethod.GET)
   public void downloadAttachment(
       HttpSession session,
       HttpServletRequest request,
       HttpServletResponse response,
       @PathVariable Integer usid,
-      @RequestParam(required = true) String name)
+      @RequestParam(required = false) String name)
       throws Exception {
-    InputStream input = inputStream(session, request, response, usid, name);
-    if (input == null) return;
-    String contentType = URLConnection.guessContentTypeFromName(name);
-    response.setContentType(contentType == null ? "application/octet-stream" : contentType);
-    response.setHeader("Content-Disposition", "attachment;fileName=" + name);
-    StreamUtils.copy(input, response.getOutputStream());
-    input.close();
+    byte[] bytes = onReadAttachment(session, request, response, usid, name);
+    if (bytes != null) {
+      String contentType = new Tika().detect(bytes);
+      response.setContentType(contentType);
+      String extension = MimeTypes.getDefaultMimeTypes().forName(contentType).getExtension();
+      String fileName =
+          name == null
+              ? "download"
+              : name.lastIndexOf('.') > -1 ? name.substring(0, name.lastIndexOf('.')) : name;
+      response.setHeader(
+          "Content-Disposition", String.format("fileName=%s%s", fileName, extension));
+      response.setHeader("Pragma", "No-cache");
+      response.setHeader("Cache-Control", "No-cache");
+      response.setDateHeader("Expires", 0);
+      StreamUtils.copy(bytes, response.getOutputStream());
+      response.getOutputStream().close();
+    }
     response.getOutputStream().close();
   }
 
   @Nullable
-  protected abstract InputStream inputStream(
+  protected abstract byte[] onReadAttachment(
       @Nonnull HttpSession session,
       @Nonnull HttpServletRequest request,
       @Nonnull HttpServletResponse response,
       @Nonnull Integer usid,
-      @Nonnull String name)
+      @Nullable String name)
       throws Exception;
 
   @CrossOrigin(origins = html, allowCredentials = "true")
@@ -233,22 +238,20 @@ public abstract class UserControllerBase {
       HttpServletRequest request,
       HttpServletResponse response,
       @PathVariable Integer usid,
-      @RequestParam(required = true) String name)
+      @RequestParam(required = false) String name)
       throws Exception {
-    OutputStream output = outputStream(session, request, response, usid, name);
-    if (output == null) return;
-    StreamUtils.copy(request.getInputStream(), output);
+    byte[] bytes = StreamUtils.copyToByteArray(request.getInputStream());
     request.getInputStream().close();
-    output.close();
+    onWriteAttachment(session, request, response, usid, name, bytes);
   }
 
-  @Nullable
-  protected abstract OutputStream outputStream(
+  protected abstract void onWriteAttachment(
       @Nonnull HttpSession session,
       @Nonnull HttpServletRequest request,
       @Nonnull HttpServletResponse response,
       @Nonnull Integer usid,
-      @Nonnull String name)
+      @Nullable String name,
+      @Nonnull byte[] bytes)
       throws Exception;
 
   @CrossOrigin(origins = html, allowCredentials = "true")
@@ -262,7 +265,7 @@ public abstract class UserControllerBase {
       HttpServletRequest request,
       HttpServletResponse response,
       @PathVariable Integer usid,
-      @RequestParam(required = true) String name)
+      @RequestParam(required = false) String name)
       throws Exception {
     onDeleteAttachment(session, request, response, usid, name);
   }
@@ -272,7 +275,7 @@ public abstract class UserControllerBase {
       @Nonnull HttpServletRequest request,
       @Nonnull HttpServletResponse response,
       @Nonnull Integer usid,
-      @Nonnull String name)
+      @Nullable String name)
       throws Exception;
 
   @CrossOrigin(origins = html, allowCredentials = "true")

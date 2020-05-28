@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.bind.annotation.RestController
 import java.io.File
 import java.io.InputStream
-import java.io.OutputStream
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 import javax.servlet.http.HttpSession
@@ -52,7 +51,7 @@ class EquipmentController : EquipmentControllerBase() {
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return }
         //删除失败，返回204
         equipmentService.delete(eqid).takeIf { it } ?: run { response.status = HttpServletResponse.SC_NO_CONTENT; return }
-        File(session.servletContext.getRealPath("$attachmentFolder/${Equipment.NAME}/$eqid")).delete()
+        File("$attachmentFolder/${Equipment.NAME}/$eqid").delete()
     }
 
     override fun onCount(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, filter: FilterExpr?): Long? {
@@ -69,29 +68,35 @@ class EquipmentController : EquipmentControllerBase() {
         return equipmentService.query(filter, orderByList, start, count, mask)
     }
 
-    override fun inputStream(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, eqid: Int, name: String): InputStream? {
+    override fun onReadAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, eqid: Int, name: String?): ByteArray? {
+        //缺name，返回400
+        name ?: run { response.status = HttpServletResponse.SC_BAD_REQUEST; return null }
         //未登录，返回403
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return null }
         //文件不存在，返回404
-        val file = File(session.servletContext.getRealPath("$attachmentFolder/${Equipment.NAME}/$eqid/$name")).takeIf { it.exists() } ?: run { response.status = HttpServletResponse.SC_NOT_FOUND; return null }
+        val file = File("$attachmentFolder/${Equipment.NAME}/$eqid/$name").takeIf { it.exists() } ?: run { response.status = HttpServletResponse.SC_NOT_FOUND; return null }
         //处理
-        return file.inputStream()
+        return file.readBytes()
     }
 
-    override fun outputStream(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, eqid: Int, name: String): OutputStream? {
+    override fun onWriteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, eqid: Int, name: String?, bytes: ByteArray) {
+        //缺name，返回400
+        name ?: run { response.status = HttpServletResponse.SC_BAD_REQUEST; return }
         //未登录，返回403
-        session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return null }
+        session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return }
         //文件已存在，返回409
-        val file = File(session.servletContext.getRealPath("$attachmentFolder/${Equipment.NAME}/$eqid/$name")).also { if (!it.parentFile.exists()) it.parentFile.mkdirs() }.takeUnless { it.exists() } ?: run { response.status = HttpServletResponse.SC_CONFLICT; return null }
+        val file = File("$attachmentFolder/${Equipment.NAME}/$eqid/$name").also { if (!it.parentFile.exists()) it.parentFile.mkdirs() }.takeUnless { it.exists() } ?: run { response.status = HttpServletResponse.SC_CONFLICT; return }
         //处理
-        return file.outputStream()
+        file.writeBytes(bytes)
     }
 
-    override fun onDeleteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, eqid: Int, name: String) {
+    override fun onDeleteAttachment(session: HttpSession, request: HttpServletRequest, response: HttpServletResponse, eqid: Int, name: String?) {
+        //缺name，返回400
+        name ?: run { response.status = HttpServletResponse.SC_BAD_REQUEST; return }
         //未登录，返回403
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return }
         //文件不存在，返回204
-        val file = File(session.servletContext.getRealPath("$attachmentFolder/${Equipment.NAME}/$eqid/$name")).takeIf { it.exists() } ?: run { response.status = HttpServletResponse.SC_NO_CONTENT; return }
+        val file = File("$attachmentFolder/${Equipment.NAME}/$eqid/$name").takeIf { it.exists() } ?: run { response.status = HttpServletResponse.SC_NO_CONTENT; return }
         //处理
         file.delete()
     }
@@ -100,7 +105,7 @@ class EquipmentController : EquipmentControllerBase() {
         //未登录，返回403
         session.usid ?: run { response.status = HttpServletResponse.SC_FORBIDDEN; return mutableListOf() }
         //处理
-        return File(session.servletContext.getRealPath("$attachmentFolder/${Equipment.NAME}/$eqid")).takeIf { it.exists() }?.list()?.toMutableList() ?: mutableListOf()
+        return File("$attachmentFolder/${Equipment.NAME}/$eqid").takeIf { it.exists() }?.list()?.toMutableList() ?: mutableListOf()
     }
 
     @Value(value = "\${app.attachmentFolder}")
